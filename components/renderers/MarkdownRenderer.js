@@ -24,20 +24,15 @@ marked.setOptions({
 export default function MarkdownRenderer({ content }) {
     const [html, setHtml] = useState('')
 
-    console.log(`[MarkdownRenderer] 渲染 - content长度: ${content?.length || 0}`)
-
     useEffect(() => {
-        console.log(`[MarkdownRenderer] useEffect触发 - content长度: ${content?.length || 0}`)
         if (content) {
             // 使用DOMPurify清理HTML(防XSS)
             const rawHtml = marked(content)
-            console.log(`[MarkdownRenderer] marked转换完成 - html长度: ${rawHtml.length}`)
 
             // 在浏览器环境中使用DOMPurify
             if (typeof window !== 'undefined') {
                 import('dompurify').then(({ default: DOMPurify }) => {
                     const cleanHtml = DOMPurify.sanitize(rawHtml)
-                    console.log(`[MarkdownRenderer] DOMPurify清理完成 - cleanHtml长度: ${cleanHtml.length}`)
                     setHtml(cleanHtml)
                 })
             } else {

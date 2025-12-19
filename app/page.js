@@ -153,7 +153,6 @@ export default function Home() {
     const callAPI = async (message, mode, setMessages) => {
         const { provider, apiKey, model } = modelConfig
 
-        console.log(`[callAPI] 开始调用 - mode: ${mode}, provider: ${provider}`)
 
         const systemPrompt = mode === 'standard'
             ? '你是一个有帮助的AI助手。请用清晰、简洁的方式回答用户的问题。支持Markdown格式。'
@@ -213,7 +212,6 @@ export default function Home() {
                 if (customUrl && !customUrl.endsWith('/chat/completions')) {
                     apiUrl = customUrl.replace(/\/+$/, '') + '/chat/completions'
                 }
-                console.log(`[callAPI-OpenAI] 使用URL: ${apiUrl}`)
 
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -238,7 +236,6 @@ export default function Home() {
 
                 const data = await response.json()
                 responseText = data.choices[0]?.message?.content || ''
-                console.log(`[callAPI-OpenAI] 响应内容长度: ${responseText.length}`)
 
             } else if (provider === 'gemini') {
                 // Gemini 非流式调用（支持自定义URL）
@@ -263,7 +260,6 @@ export default function Home() {
 
                 const data = await response.json()
                 responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-                console.log(`[callAPI-Gemini] 响应内容长度: ${responseText.length}`)
             } else {
                 throw new Error(`不支持的提供商: ${provider}`)
             }
@@ -276,7 +272,6 @@ export default function Home() {
                     content: responseText,
                     loading: false
                 }
-                console.log(`[callAPI] 更新消息完成，消息数量: ${newMessages.length}`)
                 return newMessages
             })
 

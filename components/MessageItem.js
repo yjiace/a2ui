@@ -7,8 +7,6 @@ import styles from './MessageItem.module.css'
 export default function MessageItem({ message, mode, onAction }) {
     const { role, content, loading } = message
 
-    console.log(`[MessageItem] 渲染消息 - role: ${role}, mode: ${mode}, loading: ${loading}, content长度: ${content?.length || 0}`)
-
     return (
         <div className={`${styles.messageItem} ${styles[role]} fade-in`}>
             <div className={styles.avatar}>

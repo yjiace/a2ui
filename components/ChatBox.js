@@ -8,8 +8,6 @@ import styles from './ChatBox.module.css'
 export default function ChatBox({ title, subtitle, messages, mode, onSend }) {
     const messagesEndRef = useRef(null)
 
-    console.log(`[ChatBox-${mode}] 渲染 - 消息数量: ${messages.length}`)
-
     // 自动滚动到底部
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })

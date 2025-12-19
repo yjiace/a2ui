@@ -11,14 +11,12 @@ export default function A2UIRenderer({ content, onAction }) {
     const [blocks, setBlocks] = useState([])
 
     useEffect(() => {
-        console.log(`[A2UIRenderer] useEffect触发 - content长度: ${content?.length || 0}`)
         if (content) {
             parseContent(content)
         }
     }, [content])
 
     const parseContent = (text) => {
-        console.log(`[A2UIRenderer] 开始解析内容 - 长度: ${text.length}`)
         const parsedBlocks = []
 
         // 匹配A2UI代码块: ```a2ui\n{...}\n``` (兼容Windows的\r\n换行)
@@ -41,7 +39,6 @@ export default function A2UIRenderer({ content, onAction }) {
             // 添加A2UI块
             try {
                 const a2uiData = JSON.parse(match[1])
-                console.log(`[A2UIRenderer] 解析到A2UI块:`, a2uiData)
                 parsedBlocks.push({
                     type: 'a2ui',
                     data: a2uiData
@@ -76,8 +73,6 @@ export default function A2UIRenderer({ content, onAction }) {
                 content: text
             })
         }
-
-        console.log(`[A2UIRenderer] 解析完成 - 共${parsedBlocks.length}个块`)
         setBlocks(parsedBlocks)
     }
 
