@@ -1,0 +1,17 @@
+.chart {
+    padding: 20px;
+    margin: 16px 0;
+}
+
+.title {
+    margin: 0 0 16px 0;
+    font-size: 1.2em;
+    color: var(--color-neon-orange);
+    font-weight: 600;
+}
+
+.canvas {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+}

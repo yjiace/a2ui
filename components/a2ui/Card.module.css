@@ -1,0 +1,44 @@
+.card {
+    padding: 20px;
+    margin: 16px 0;
+    border-left: 4px solid var(--color-neon-purple);
+    animation: slideInRight 0.5s ease-out;
+}
+
+.title {
+    margin: 0 0 12px 0;
+    font-size: 1.3em;
+    color: var(--color-neon-purple);
+    font-weight: 600;
+}
+
+.description {
+    margin: 0 0 12px 0;
+    font-size: 0.95em;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.5;
+}
+
+.content {
+    margin-bottom: 16px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}

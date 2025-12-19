@@ -1,0 +1,53 @@
+.chatBox {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.header {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.header h2 {
+    margin: 0;
+    font-size: 1.1em;
+    font-weight: 600;
+}
+
+.subtitle {
+    margin: 1px 0 0 0;
+    font-size: 0.8em;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.emptyState {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.5;
+    text-align: center;
+}
+
+.emptyIcon {
+    font-size: 4em;
+    margin-bottom: 16px;
+    animation: float 3s ease-in-out infinite;
+}
+
+.emptyState p {
+    font-size: 1.1em;
+    color: rgba(255, 255, 255, 0.7);
+}

@@ -1,0 +1,59 @@
+.button {
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid;
+    background: transparent;
+    position: relative;
+    overflow: hidden;
+    margin: 8px 8px 8px 0;
+}
+
+.button::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.button:hover::before {
+    width: 300px;
+    height: 300px;
+}
+
+.button:hover {
+    transform: translateY(-2px);
+}
+
+.primary {
+    border-color: var(--color-neon-blue);
+    color: var(--color-neon-blue);
+}
+
+.primary::before {
+    background: rgba(0, 212, 255, 0.2);
+}
+
+.primary:hover {
+    box-shadow: var(--shadow-neon-blue);
+}
+
+.secondary {
+    border-color: var(--color-neon-purple);
+    color: var(--color-neon-purple);
+}
+
+.secondary::before {
+    background: rgba(157, 78, 221, 0.2);
+}
+
+.secondary:hover {
+    box-shadow: var(--shadow-neon-purple);
+}

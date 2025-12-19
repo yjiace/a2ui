@@ -1,0 +1,520 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import ChatBox from '@/components/ChatBox'
+import UnifiedInput from '@/components/UnifiedInput'
+import ModelConfig from '@/components/ModelConfig'
+import SessionList from '@/components/SessionList'
+import styles from './page.module.css'
+
+export default function Home() {
+    const [sessions, setSessions] = useState([])
+    const [currentSessionId, setCurrentSessionId] = useState(null)
+    const [messagesA, setMessagesA] = useState([]) // 标准模式消息
+    const [messagesB, setMessagesB] = useState([]) // A2UI模式消息
+    const [modelConfig, setModelConfig] = useState(null)
+    const [showConfig, setShowConfig] = useState(false)
+    const [showSessions, setShowSessions] = useState(false)
+
+    // 从localStorage加载数据
+    useEffect(() => {
+        const savedConfig = localStorage.getItem('modelConfig')
+        if (savedConfig) {
+            setModelConfig(JSON.parse(savedConfig))
+        }
+
+        const savedSessions = localStorage.getItem('sessions')
+        if (savedSessions) {
+            const parsedSessions = JSON.parse(savedSessions)
+            setSessions(parsedSessions)
+
+            // 加载最后一个会话
+            if (parsedSessions.length > 0) {
+                const lastSession = parsedSessions[parsedSessions.length - 1]
+                setCurrentSessionId(lastSession.id)
+                setMessagesA(lastSession.messagesA || [])
+                setMessagesB(lastSession.messagesB || [])
+            } else {
+                // 创建新会话
+                createNewSession()
+            }
+        } else {
+            createNewSession()
+        }
+    }, [])
+
+    // 保存会话到localStorage
+    useEffect(() => {
+        if (currentSessionId && messagesA.length > 0) {
+            const updatedSessions = sessions.map(session =>
+                session.id === currentSessionId
+                    ? { ...session, messagesA, messagesB, updatedAt: Date.now() }
+                    : session
+            )
+
+            if (!sessions.find(s => s.id === currentSessionId)) {
+                updatedSessions.push({
+                    id: currentSessionId,
+                    messagesA,
+                    messagesB,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now()
+                })
+            }
+
+            setSessions(updatedSessions)
+            localStorage.setItem('sessions', JSON.stringify(updatedSessions))
+        }
+    }, [messagesA, messagesB, currentSessionId])
+
+    const createNewSession = () => {
+        const newSessionId = Date.now().toString()
+        setCurrentSessionId(newSessionId)
+        setMessagesA([])
+        setMessagesB([])
+    }
+
+    const switchSession = (sessionId) => {
+        const session = sessions.find(s => s.id === sessionId)
+        if (session) {
+            setCurrentSessionId(session.id)
+            setMessagesA(session.messagesA || [])
+            setMessagesB(session.messagesB || [])
+            setShowSessions(false)
+        }
+    }
+
+    const handleDeleteSession = (sessionId, e) => {
+        e.stopPropagation()
+        const updatedSessions = sessions.filter(s => s.id !== sessionId)
+        setSessions(updatedSessions)
+        localStorage.setItem('sessions', JSON.stringify(updatedSessions))
+
+        if (sessionId === currentSessionId) {
+            if (updatedSessions.length > 0) {
+                switchSession(updatedSessions[0].id)
+            } else {
+                createNewSession()
+            }
+        }
+    }
+
+    const handleSendMessage = async (message, target = 'both') => {
+        if (!modelConfig) {
+            alert('请先配置大模型')
+            setShowConfig(true)
+            return
+        }
+
+        // 添加用户消息和loading状态的助手消息（合并为一次setState）
+        if (target === 'both' || target === 'A') {
+            setMessagesA(prev => [
+                ...prev,
+                { role: 'user', content: message },
+                { role: 'assistant', content: '', loading: true }
+            ])
+        }
+        if (target === 'both' || target === 'B') {
+            setMessagesB(prev => [
+                ...prev,
+                { role: 'user', content: message },
+                { role: 'assistant', content: '', loading: true }
+            ])
+        }
+
+        try {
+            const tasks = []
+            if (target === 'both' || target === 'A') {
+                tasks.push(callAPI(message, 'standard', setMessagesA))
+            }
+            if (target === 'both' || target === 'B') {
+                tasks.push(callAPI(message, 'a2ui', setMessagesB))
+            }
+            await Promise.all(tasks)
+        } catch (error) {
+            console.error('API调用失败:', error)
+            const errorMsg = { role: 'assistant', content: `错误: ${error.message}`, loading: false }
+            if (target === 'both' || target === 'A') {
+                setMessagesA(prev => {
+                    const newMessages = [...prev]
+                    newMessages[newMessages.length - 1] = errorMsg
+                    return newMessages
+                })
+            }
+            if (target === 'both' || target === 'B') {
+                setMessagesB(prev => {
+                    const newMessages = [...prev]
+                    newMessages[newMessages.length - 1] = errorMsg
+                    return newMessages
+                })
+            }
+        }
+    }
+
+    const callAPI = async (message, mode, setMessages) => {
+        const { provider, apiKey, model } = modelConfig
+
+        console.log(`[callAPI] 开始调用 - mode: ${mode}, provider: ${provider}`)
+
+        const systemPrompt = mode === 'standard'
+            ? '你是一个有帮助的AI助手。请用清晰、简洁的方式回答用户的问题。'
+            : `你是一个支持A2UI协议的助手。返回格式化UI组件：\n\`\`\`a2ui\n{ "type": "card", ... }\n\`\`\`\n支持：card, button, list, chart。`
+
+        try {
+            let responseText = ''
+
+            if (provider === 'openai') {
+                // OpenAI 非流式调用
+                const apiUrl = 'https://api.openai.com/v1/chat/completions'
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: model || 'gpt-3.5-turbo',
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: message }
+                        ],
+                        stream: false
+                    })
+                })
+
+                if (!response.ok) {
+                    throw new Error(`OpenAI API 错误: ${response.status}`)
+                }
+
+                const data = await response.json()
+                responseText = data.choices[0]?.message?.content || ''
+                console.log(`[callAPI-OpenAI] 响应内容长度: ${responseText.length}`)
+
+            } else if (provider === 'gemini') {
+                // Gemini 非流式调用
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.5-flash'}:generateContent?key=${apiKey}`
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{ text: systemPrompt + '\n\n用户: ' + message }]
+                        }]
+                    })
+                })
+
+                if (!response.ok) {
+                    throw new Error(`Gemini API 错误: ${response.status}`)
+                }
+
+                const data = await response.json()
+                responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+                console.log(`[callAPI-Gemini] 响应内容长度: ${responseText.length}`)
+            }
+
+            // 更新消息状态
+            setMessages(prev => {
+                const newMessages = [...prev]
+                newMessages[newMessages.length - 1] = {
+                    role: 'assistant',
+                    content: responseText,
+                    loading: false
+                }
+                console.log(`[callAPI] 更新消息完成，消息数量: ${newMessages.length}`)
+                return newMessages
+            })
+
+        } catch (error) {
+            console.error('[callAPI] 错误:', error)
+            setMessages(prev => {
+                const newMessages = [...prev]
+                newMessages[newMessages.length - 1] = {
+                    role: 'assistant',
+                    content: `错误: ${error.message}`,
+                    loading: false
+                }
+                return newMessages
+            })
+        }
+    } = async (message, mode, setMessages) => {
+        const { provider, apiKey, model } = modelConfig
+
+        console.log(`[callAPI] 开始调用 - mode: ${mode}, provider: ${provider}`)
+
+        const systemPrompt = mode === 'standard'
+            ? '你是一个有帮助的AI助手。请用清晰、简洁的方式回答用户的问题。'
+            : `你是一个支持A2UI协议的助助手。返回格式化UI组件：\n\`\`\`a2ui\n{ "type": "card", ... }\n\`\`\`\n支持：card, button, list, chart。`
+
+        let apiUrl, headers, body
+
+        if (provider === 'openai') {
+            apiUrl = 'https://api.openai.com/v1/chat/completions'
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            }
+            body = JSON.stringify({
+                model: model || 'gpt-3.5-turbo',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: message }
+                ],
+                stream: true
+            })
+        } else if (provider === 'gemini') {
+            apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-pro'}:streamGenerateContent?key=${apiKey}`
+            headers = {
+                'Content-Type': 'application/json'
+            }
+            body = JSON.stringify({
+                contents: [
+                    {
+                        parts: [
+                            { text: systemPrompt + '\n\n用户: ' + message }
+                        ]
+                    }
+                ]
+            })
+        }
+
+        console.log(`[callAPI] 请求URL: ${apiUrl}`)
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers,
+            body
+        })
+
+        if (!response.ok) {
+            const errorText = await response.text()
+            console.error(`[callAPI] API错误: ${response.status} ${response.statusText}`, errorText)
+            throw new Error(`API错误: ${response.status} ${response.statusText}`)
+        }
+
+        console.log(`[callAPI] 开始读取流式响应`)
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let fullContent = ''
+        let chunkCount = 0
+        let geminiBuffer = '' // Gemini 专用缓冲区
+
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) {
+                console.log(`[callAPI] 流式响应结束 - 总共接收 ${chunkCount} 个chunk, 总内容长度: ${fullContent.length}`)
+                break
+            }
+
+            chunkCount++
+            const chunk = decoder.decode(value)
+            const lines = chunk.split('\n').filter(line => line.trim() !== '')
+
+            for (const line of lines) {
+                if (provider === 'openai') {
+                    // OpenAI 可能在同一行返回多个 data: 块
+                    const dataBlocks = line.split('data: ').filter(b => b.trim() !== '')
+                    for (const data of dataBlocks) {
+                        if (data.trim() === '[DONE]') continue
+                        try {
+                            const parsed = JSON.parse(data.trim())
+                            const content = parsed.choices?.[0]?.delta?.content || ''
+                            if (content) {
+                                fullContent += content
+                                console.log(`[callAPI-OpenAI] 接收内容片段，当前总长度: ${fullContent.length}`)
+                                setMessages(prev => {
+                                    const newMessages = [...prev]
+                                    newMessages[newMessages.length - 1] = {
+                                        role: 'assistant',
+                                        content: fullContent,
+                                        loading: false
+                                    }
+                                    console.log(`[callAPI-OpenAI] 更新消息状态，消息数量: ${newMessages.length}`)
+                                    return newMessages
+                                })
+                            }
+                        } catch (e) {
+                            console.warn(`[callAPI-OpenAI] 解析chunk失败:`, e)
+                        }
+                    }
+                } else if (provider === 'gemini') {
+                    // Gemini: 累积所有数据到缓冲区
+                    geminiBuffer += chunk
+                    console.log(`[callAPI-Gemini] 累积数据，当前缓冲区长度: ${geminiBuffer.length}`)
+
+                    // 尝试解析累积的数据
+                    try {
+                        const parsed = JSON.parse(geminiBuffer)
+                        console.log(`[callAPI-Gemini] 成功解析JSON`)
+
+                        // 提取所有内容
+                        let newContent = ''
+                        if (Array.isArray(parsed)) {
+                            for (const item of parsed) {
+                                const text = item.candidates?.[0]?.content?.parts?.[0]?.text || ''
+                                if (text) {
+                                    newContent += text
+                                }
+                            }
+                        } else {
+                            const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || ''
+                            if (text) {
+                                newContent = text
+                            }
+                        }
+
+                        if (newContent && newContent !== fullContent) {
+                            fullContent = newContent
+                            console.log(`[callAPI-Gemini] 提取内容: "${fullContent.substring(0, 100)}...", 总长度: ${fullContent.length}`)
+                            setMessages(prev => {
+                                const newMessages = [...prev]
+                                newMessages[newMessages.length - 1] = {
+                                    role: 'assistant',
+                                    content: fullContent,
+                                    loading: false
+                                }
+                                console.log(`[callAPI-Gemini] 更新消息状态，消息数量: ${newMessages.length}`)
+                                return newMessages
+                            })
+                        }
+                    } catch (e) {
+                        // JSON 还不完整，继续累积
+                        console.log(`[callAPI-Gemini] JSON尚未完整，继续累积...`)
+                    }
+                }
+            }
+        }
+
+        // Gemini: 流结束后尝试最后一次解析
+        if (provider === 'gemini' && geminiBuffer) {
+            console.log(`[callAPI-Gemini] 流结束，buffer总长度: ${geminiBuffer.length}`)
+
+            try {
+                // Gemini 返回多个 JSON 对象，对象间无逗号，需要分割后逐个解析
+                let fullText = ''
+                let cleanBuffer = geminiBuffer.trim()
+
+                // 移除数组的 [ 和 ]
+                if (cleanBuffer.startsWith('[')) cleanBuffer = cleanBuffer.slice(1)
+                if (cleanBuffer.endsWith(']')) cleanBuffer = cleanBuffer.slice(0, -1)
+
+                // 按 }{ 分割成多个 JSON 对象
+                const jsonObjects = cleanBuffer.split(/\}\s*\{/).map((obj, index, arr) => {
+                    if (index === 0) return obj + '}'
+                    if (index === arr.length - 1) return '{' + obj
+                    return '{' + obj + '}'
+                })
+
+                console.log(`[callAPI-Gemini] 分割出 ${jsonObjects.length} 个JSON对象`)
+
+                // 逐个解析并提取文本
+                for (const jsonStr of jsonObjects) {
+                    try {
+                        const parsed = JSON.parse(jsonStr.trim())
+                        const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || ''
+                        if (text) fullText += text
+                    } catch (e) {
+                        console.warn(`[callAPI-Gemini] 解析单个JSON失败`)
+                    }
+                }
+
+                const finalContent = fullText
+
+                if (finalContent) {
+                    console.log(`[callAPI-Gemini] 流结束解析成功，总内容长度: ${finalContent.length}`)
+                    setMessages(prev => {
+                        const newMessages = [...prev]
+                        newMessages[newMessages.length - 1] = {
+                            role: 'assistant',
+                            content: finalContent,
+                            loading: false
+                        }
+                        return newMessages
+                    })
+                }
+            } catch (e) {
+                console.error(`[callAPI-Gemini] 流结束解析失败:`, e)
+            }
+        }
+
+        console.log(`[callAPI] 流式响应读取完成`)
+    }
+
+
+
+    return (
+        <div className={styles.container}>
+            {/* 顶部工具栏 */}
+            <header className={styles.header}>
+                <div className={styles.logo}>
+                    <h1 className="neon-text">A2UI协议演示</h1>
+                    <p className={styles.subtitle}>AI增强UI对比展示</p>
+                </div>
+                <div className={styles.headerActions}>
+                    <button
+                        className="neon-button"
+                        onClick={() => setShowSessions(!showSessions)}
+                    >
+                        历史会话
+                    </button>
+                    <button
+                        className="neon-button"
+                        onClick={() => setShowConfig(!showConfig)}
+                    >
+                        模型配置
+                    </button>
+                </div>
+            </header>
+
+            {/* 模型配置面板 */}
+            {showConfig && (
+                <ModelConfig
+                    config={modelConfig}
+                    onSave={(config) => {
+                        setModelConfig(config)
+                        localStorage.setItem('modelConfig', JSON.stringify(config))
+                        setShowConfig(false)
+                    }}
+                    onClose={() => setShowConfig(false)}
+                />
+            )}
+
+            {/* 会话列表面板 */}
+            {showSessions && (
+                <SessionList
+                    sessions={sessions}
+                    currentSessionId={currentSessionId}
+                    onSelectSession={switchSession}
+                    onDeleteSession={handleDeleteSession}
+                    onNewSession={createNewSession}
+                    onClose={() => setShowSessions(false)}
+                />
+            )}
+
+            {/* 双聊天框布局 */}
+            <main className={styles.main}>
+                <div className={styles.chatContainer}>
+                    <ChatBox
+                        title="标准模式"
+                        subtitle="纯Markdown渲染"
+                        messages={messagesA}
+                        mode="standard"
+                        onSend={(msg) => handleSendMessage(msg, 'A')}
+                    />
+                    <ChatBox
+                        title="A2UI协议模式"
+                        subtitle="Markdown + A2UI组件"
+                        messages={messagesB}
+                        mode="a2ui"
+                        onSend={(msg) => handleSendMessage(msg, 'B')}
+                    />
+                </div>
+
+                {/* 统一输入框 */}
+                <UnifiedInput onSend={handleSendMessage} />
+            </main>
+        </div>
+    )
+}
