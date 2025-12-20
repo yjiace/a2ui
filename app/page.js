@@ -154,60 +154,51 @@ export default function Home() {
         const { provider, apiKey, model } = modelConfig
 
 
+        // 标准模式使用Markdown，A2UI模式使用官方协议格式
         const systemPrompt = mode === 'standard'
-            ? '你是一个有帮助的AI助手。请用清晰、简洁的方式回答用户的问题。支持Markdown格式。'
-            : `你是一个支持A2UI协议的AI助手。除了普通文本回复，你可以返回结构化UI组件。
+            ? '你是一个有帮助的AI助手。请用清晰、详细的方式回答用户的问题。使用丰富的Markdown格式来组织内容，包括标题、列表、代码块、表格等。'
+            : `你是一个遵循A2UI协议v0.8的AI助手。请根据用户需求生成丰富、详细的UI界面。
 
-使用A2UI组件时，请用以下格式包裹JSON：
-\`\`\`a2ui
-{JSON对象}
-\`\`\`
+## 输出格式
+使用JSONL格式（每行一个JSON对象），消息类型：
+- surfaceUpdate: 定义UI组件
+- beginRendering: 开始渲染（最后发送）
 
-支持的组件类型：
+## 可用组件
+- Text: 文本 {"text": {"literalString": "内容"},"usageHint": "h1|h2|h3|body|caption"}
+- Button: 按钮 {"label": {"literalString": "文字"},"action": {"name": "动作名"}}
+- Card: 卡片容器 {"child": "子组件ID"}
+- Row: 水平布局 {"children": {"explicitList": ["id1","id2"]}}
+- Column: 垂直布局 {"children": {"explicitList": ["id1","id2"]}}
+- List: 列表 {"children": {"explicitList": ["id1","id2"]}}
 
-1. **card** - 卡片组件
-{
-  "type": "card",
-  "title": "标题",
-  "description": "描述文字",
-  "content": "主要内容",
-  "actions": [{"label": "按钮文字", "message": "用户点击后发送给你的消息"}]
-}
+## 规则
+1. 组件通过ID引用（邻接表），每个组件需要id和component
+2. 根组件ID必须为"root"
+3. 最后发送 {"beginRendering":{"root":"root"}}
+4. **重要：内容要详细丰富**，将长文本分成多个Text组件，使用h1/h2/h3层级
+5. 可以创建多个Card卡片来组织不同章节
 
-2. **button** - 按钮组件
-{
-  "type": "button",
-  "label": "按钮文字",
-  "message": "点击后发送给你的消息",
-  "variant": "primary|secondary"
-}
+## 示例
+{"surfaceUpdate":{"components":[{"id":"root","component":{"Column":{"children":{"explicitList":["card1","card2"]}}}}]}}
+{"surfaceUpdate":{"components":[{"id":"card1","component":{"Card":{"child":"c1"}}}]}}
+{"surfaceUpdate":{"components":[{"id":"c1","component":{"Column":{"children":{"explicitList":["t1","t2"]}}}}]}}
+{"surfaceUpdate":{"components":[{"id":"t1","component":{"Text":{"text":{"literalString":"标题"},"usageHint":"h1"}}}]}}
+{"surfaceUpdate":{"components":[{"id":"t2","component":{"Text":{"text":{"literalString":"详细内容描述..."},"usageHint":"body"}}}]}}
+{"surfaceUpdate":{"components":[{"id":"card2","component":{"Card":{"child":"c2"}}}]}}
+{"surfaceUpdate":{"components":[{"id":"c2","component":{"Column":{"children":{"explicitList":["t3","t4"]}}}}]}}
+{"surfaceUpdate":{"components":[{"id":"t3","component":{"Text":{"text":{"literalString":"第二部分"},"usageHint":"h2"}}}]}}
+{"surfaceUpdate":{"components":[{"id":"t4","component":{"Text":{"text":{"literalString":"更多详细内容..."},"usageHint":"body"}}}]}}
+{"beginRendering":{"root":"root"}}
 
-3. **list** - 列表组件
-{
-  "type": "list",
-  "title": "列表标题",
-  "items": ["项目1", "项目2", "项目3"]
-}
-
-4. **chart** - 图表组件
-{
-  "type": "chart",
-  "title": "图表标题",
-  "chartType": "bar",
-  "data": [{"label": "A", "value": 100}, {"label": "B", "value": 200}]
-}
-
-**重要**: 按钮的message属性定义了用户点击按钮后会发送给你的消息，你收到这个消息后应该继续对话。这样可以实现多轮交互。
-
-你可以在普通Markdown文本中穿插使用这些组件。请根据用户需求选择合适的组件展示信息。`
+请生成尽可能丰富和详细的UI内容，回复时只输出JSONL消息。`
 
         try {
             let responseText = ''
             const { customUrl } = modelConfig
 
             if (provider === 'openai') {
-                // OpenAI 非流式调用（支持自定义URL）
-                // 自动补全路径：如果customUrl不以/chat/completions结尾，则补全
+                // OpenAI 流式调用
                 let apiUrl = customUrl || 'https://api.openai.com/v1/chat/completions'
                 if (customUrl && !customUrl.endsWith('/chat/completions')) {
                     apiUrl = customUrl.replace(/\/+$/, '') + '/chat/completions'
@@ -223,9 +214,14 @@ export default function Home() {
                         model: model || 'gpt-3.5-turbo',
                         messages: [
                             { role: 'system', content: systemPrompt },
+                            // 添加历史消息（排除loading状态的消息）
+                            ...(mode === 'standard' ? messagesA : messagesB)
+                                .filter(m => !m.loading && m.content)
+                                .slice(-10) // 保留最近10条消息
+                                .map(m => ({ role: m.role, content: m.content })),
                             { role: 'user', content: message }
                         ],
-                        stream: false
+                        stream: true
                     })
                 })
 
@@ -234,22 +230,74 @@ export default function Home() {
                     throw new Error(`OpenAI API 错误: ${response.status} ${errorText}`)
                 }
 
-                const data = await response.json()
-                responseText = data.choices[0]?.message?.content || ''
+                // SSE流式读取
+                const reader = response.body.getReader()
+                const decoder = new TextDecoder()
+                let buffer = ''
+
+                while (true) {
+                    const { done, value } = await reader.read()
+                    if (done) break
+
+                    buffer += decoder.decode(value, { stream: true })
+                    const lines = buffer.split('\n')
+                    buffer = lines.pop() || ''
+
+                    for (const line of lines) {
+                        const trimmed = line.trim()
+                        if (trimmed.startsWith('data:')) {
+                            const data = trimmed.slice(5).trim()
+                            if (data && data !== '[DONE]') {
+                                try {
+                                    const parsed = JSON.parse(data)
+                                    const content = parsed.choices?.[0]?.delta?.content || ''
+                                    if (content) {
+                                        responseText += content
+                                        // 实时更新UI
+                                        setMessages(prev => {
+                                            const newMessages = [...prev]
+                                            newMessages[newMessages.length - 1] = {
+                                                role: 'assistant',
+                                                content: responseText,
+                                                loading: true
+                                            }
+                                            return newMessages
+                                        })
+                                    }
+                                } catch (e) {
+                                    // 忽略解析错误
+                                }
+                            }
+                        }
+                    }
+                }
 
             } else if (provider === 'gemini') {
-                // Gemini 非流式调用（支持自定义URL）
+                // Gemini 流式调用
                 const baseUrl = customUrl || 'https://generativelanguage.googleapis.com/v1beta'
-                const apiUrl = `${baseUrl}/models/${model || 'gemini-2.5-flash'}:generateContent?key=${apiKey}`
+                const apiUrl = `${baseUrl}/models/${model || 'gemini-2.0-flash'}:streamGenerateContent?key=${apiKey}&alt=sse`
+
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        contents: [{
-                            parts: [{ text: systemPrompt + '\n\n用户: ' + message }]
-                        }]
+                        contents: [
+                            // 系统提示
+                            { role: 'user', parts: [{ text: systemPrompt }] },
+                            { role: 'model', parts: [{ text: '好的，我会遵循这些规则。' }] },
+                            // 添加历史消息
+                            ...(mode === 'standard' ? messagesA : messagesB)
+                                .filter(m => !m.loading && m.content)
+                                .slice(-10)
+                                .map(m => ({
+                                    role: m.role === 'user' ? 'user' : 'model',
+                                    parts: [{ text: m.content }]
+                                })),
+                            // 当前消息
+                            { role: 'user', parts: [{ text: message }] }
+                        ]
                     })
                 })
 
@@ -258,13 +306,52 @@ export default function Home() {
                     throw new Error(`Gemini API 错误: ${response.status} ${errorText}`)
                 }
 
-                const data = await response.json()
-                responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+                // SSE流式读取
+                const reader = response.body.getReader()
+                const decoder = new TextDecoder()
+                let buffer = ''
+
+                while (true) {
+                    const { done, value } = await reader.read()
+                    if (done) break
+
+                    buffer += decoder.decode(value, { stream: true })
+                    const lines = buffer.split('\n')
+                    buffer = lines.pop() || ''
+
+                    for (const line of lines) {
+                        const trimmed = line.trim()
+                        if (trimmed.startsWith('data:')) {
+                            const data = trimmed.slice(5).trim()
+                            if (data) {
+                                try {
+                                    const parsed = JSON.parse(data)
+                                    const content = parsed.candidates?.[0]?.content?.parts?.[0]?.text || ''
+                                    if (content) {
+                                        responseText += content
+                                        // 实时更新UI
+                                        setMessages(prev => {
+                                            const newMessages = [...prev]
+                                            newMessages[newMessages.length - 1] = {
+                                                role: 'assistant',
+                                                content: responseText,
+                                                loading: true
+                                            }
+                                            return newMessages
+                                        })
+                                    }
+                                } catch (e) {
+                                    // 忽略解析错误
+                                }
+                            }
+                        }
+                    }
+                }
             } else {
                 throw new Error(`不支持的提供商: ${provider}`)
             }
 
-            // 更新消息状态
+            // 完成后更新状态
             setMessages(prev => {
                 const newMessages = [...prev]
                 newMessages[newMessages.length - 1] = {

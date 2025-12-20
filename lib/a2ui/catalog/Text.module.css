@@ -1,0 +1,39 @@
+.text {
+    margin: 0;
+    color: var(--text-color, #e0e0e0);
+}
+
+.h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+    color: #a0c4ff;
+}
+
+.h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+    color: #bdb2ff;
+}
+
+.body {
+    font-size: 1rem;
+    line-height: 1.6;
+    margin-bottom: 0.25rem;
+}
+
+.caption {
+    font-size: 0.85rem;
+    opacity: 0.75;
+}

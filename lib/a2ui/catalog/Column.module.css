@@ -1,0 +1,17 @@
+.column {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.start {
+    align-items: flex-start;
+}
+
+.center {
+    align-items: center;
+}
+
+.end {
+    align-items: flex-end;
+}
